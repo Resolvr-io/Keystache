@@ -7,11 +7,15 @@ use nip_70::{
 };
 use nostr_sdk::event::{Event, UnsignedEvent};
 use nostr_sdk::key::XOnlyPublicKey;
-use nostr_sdk::Keys;
+use nostr_sdk::{Keys, ToBech32};
 use std::collections::HashMap;
 use std::sync::Arc;
 use tauri::Manager;
 use tokio::sync::Mutex;
+mod database;
+use serde_json::Value;
+
+use nostr_sdk::prelude::*;
 
 struct KeystacheNip70 {
     /// The key pair used to sign events.
@@ -44,11 +48,32 @@ impl KeystacheNip70 {
 #[async_trait]
 impl Nip70 for KeystacheNip70 {
     async fn get_public_key(&self) -> Result<XOnlyPublicKey, Nip70ServerError> {
-        Ok(self.keys.public_key())
+        let nsec = database::Database::get_first_nsec().unwrap();
+
+        let secret_key = SecretKey::from_bech32(nsec).unwrap();
+
+        let my_keys: Keys = Keys::new(secret_key);
+
+        let public_key = my_keys.public_key();
+
+        Ok(public_key)
     }
 
     async fn sign_event(&self, event: UnsignedEvent) -> Result<Event, Nip70ServerError> {
         let (tx, rx) = tokio::sync::oneshot::channel();
+
+        let npub = event.pubkey.to_bech32().unwrap();
+
+        println!("npub: {}", npub);
+
+        let nsec = database::Database::get_nsec_by_npub(&npub).unwrap();
+
+        println!("nsec: {:?}", nsec);
+
+        let secret_key = SecretKey::from_bech32(nsec).unwrap();
+
+        let my_keys: Keys = Keys::new(secret_key);
+
         self.in_progress_event_signings
             .lock()
             .await
@@ -62,7 +87,7 @@ impl Nip70 for KeystacheNip70 {
 
         if signing_approved {
             event
-                .sign(&self.keys)
+                .sign(&my_keys)
                 .map_err(|_| Nip70ServerError::InternalError)
         } else {
             Err(Nip70ServerError::Rejected)
@@ -95,6 +120,11 @@ impl Nip70 for KeystacheNip70 {
         // TODO: Implement relay support.
         Ok(None)
     }
+}
+
+#[tauri::command]
+fn register(nsec: String, npub: String) -> Value {
+    database::Database::register(nsec, npub)
 }
 
 #[tauri::command]
@@ -160,9 +190,10 @@ async fn get_public_key(
 async fn main() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
+            register,
             respond_to_sign_event_request,
             respond_to_pay_invoice_request,
-            get_public_key
+            get_public_key,
         ])
         .setup(|app| {
             let keystache_nip_70 = Arc::new(KeystacheNip70::new_with_generated_keys(app.handle()));
