@@ -48,6 +48,18 @@ impl Database {
             Err(e) => panic!("Failed to open database: {}", e),
         };
 
+        db_connection
+            .execute(
+                "CREATE TABLE IF NOT EXISTS keys (
+                id INTEGER PRIMARY KEY,
+                npub TEXT NOT NULL,
+                nsec TEXT NOT NULL,
+                creation_date TEXT NOT NULL
+            )",
+                [],
+            )
+            .unwrap();
+
         Database {
             db_connection: Arc::from(Mutex::from(db_connection)),
         }
@@ -55,18 +67,6 @@ impl Database {
 
     pub fn register(&self, nsec: String, npub: String) -> Value {
         let db_connection = self.db_connection.lock().unwrap();
-
-        if let Err(e) = db_connection.execute(
-            "CREATE TABLE IF NOT EXISTS keys (
-                id INTEGER PRIMARY KEY,
-                npub TEXT NOT NULL,
-                nsec TEXT NOT NULL,
-                creation_date TEXT NOT NULL
-            )",
-            [],
-        ) {
-            return RegisterResponse::error(format!("Failed to create table: {}", e));
-        }
 
         let creation_date = Utc::now().naive_utc();
         match db_connection.execute(
@@ -124,3 +124,4 @@ impl Database {
         Err("No records found in the database".to_string())
     }
 }
+

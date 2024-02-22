@@ -52,9 +52,12 @@ impl KeystacheNip70 {
 #[async_trait]
 impl Nip70 for KeystacheNip70 {
     async fn get_public_key(&self) -> Result<XOnlyPublicKey, Nip70ServerError> {
-        let nsec = self.db_connection.get_first_nsec().unwrap();
+        let nsec = self
+            .db_connection
+            .get_first_nsec()
+            .map_err(|err| Nip70ServerError::InternalError)?;
 
-        let secret_key = SecretKey::from_bech32(nsec).unwrap();
+        let secret_key = SecretKey::from_bech32(nsec).map_err(|_| Nip70ServerError::InternalError)?;
 
         let my_keys: Keys = Keys::new(secret_key);
 
@@ -214,3 +217,4 @@ async fn main() {
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
+
