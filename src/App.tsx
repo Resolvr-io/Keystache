@@ -51,7 +51,12 @@ const App = () => {
         <h1>Welcome to Keystache!</h1>
       </div>
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="h-[20rem] max-w-[22rem]">
+        <DialogContent
+          onInteractOutside={(e) => {
+            e.preventDefault();
+          }}
+          className="h-[20rem] max-w-[22rem]"
+        >
           <DialogHeader>
             <DialogTitle>Sign Event?</DialogTitle>
           </DialogHeader>
